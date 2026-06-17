@@ -340,7 +340,7 @@ var st,ct,ut,lt,dt,ht,pt,gt,ft,mt=function(){function t(e,t,r){this.networkInter
     <div class="kpi-card c-success">
       <div class="kpi-label">Windows Devices</div>
       <div class="kpi-value c-success" id="kpi-windows">198</div>
-      <div class="kpi-sub" id="kpi-windows-sub">across multiple patch versions</div>
+      <div class="kpi-sub">managed by Intune</div>
     </div>
     <div class="kpi-card c-warning">
       <div class="kpi-label">Mobile Devices</div>
@@ -379,35 +379,6 @@ var st,ct,ut,lt,dt,ht,pt,gt,ft,mt=function(){function t(e,t,r){this.networkInter
           </div>
         </div>
         <div class="compliance-breakdown" id="platform-bars"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Windows Patch Versions -->
-  <div class="section-eyebrow">Windows Patch Currency</div>
-  <div class="grid-2">
-    <div class="card">
-      <div class="card-head">
-        <div>
-          <div class="card-title">Windows OS Version Distribution</div>
-          <div class="card-desc">Active Windows devices by patch version — older versions indicate patch gaps</div>
-        </div>
-        <span class="card-tag tag-warning" id="win-outdated-tag">checking...</span>
-      </div>
-      <canvas id="chart-windows-versions" height="200"></canvas>
-    </div>
-    <div class="card">
-      <div class="card-head">
-        <div>
-          <div class="card-title">Windows Devices — Patch Detail</div>
-          <div class="card-desc">All active Windows devices with OS version</div>
-        </div>
-      </div>
-      <div class="table-scroll">
-        <table class="data-table">
-          <thead><tr><th>Device</th><th>User</th><th>OS Version</th><th>Compliance</th></tr></thead>
-          <tbody id="windows-patch-tbody"></tbody>
-        </table>
       </div>
     </div>
   </div>
@@ -495,26 +466,6 @@ const DEMO = {
     {label:'Android',pct:71,color:C.warning},
   ],
 
-  windowsVersions:[
-    {version:'Windows 11 24H2', build:'10.0.26100', count:62, current:true},
-    {version:'Windows 11 23H2', build:'10.0.22631', count:71, current:true},
-    {version:'Windows 11 22H2', build:'10.0.22621', count:34, current:false},
-    {version:'Windows 10 22H2', build:'10.0.19045', count:21, current:false},
-    {version:'Windows 10 21H2', build:'10.0.19044', count:7,  current:false},
-    {version:'Windows 10 21H1', build:'10.0.19043', count:3,  current:false},
-  ],
-
-  windowsDevices:[
-    {name:'DESKTOP-A1B2C',user:'j.harrison@contoso.com',  version:'Windows 11 24H2',compliant:true},
-    {name:'LAPTOP-SEC-01', user:'a.patel@contoso.com',    version:'Windows 11 23H2',compliant:true},
-    {name:'DESKTOP-RX-09', user:'r.nguyen@contoso.com',   version:'Windows 10 22H2',compliant:false},
-    {name:'LAPTOP-HR-14',  user:'k.okafor@contoso.com',   version:'Windows 11 23H2',compliant:true},
-    {name:'DESKTOP-FIN-3', user:'m.espinoza@contoso.com', version:'Windows 10 21H2',compliant:false},
-    {name:'LAPTOP-IT-07',  user:'t.rodriguez@contoso.com',version:'Windows 11 24H2',compliant:true},
-    {name:'DESKTOP-MG-02', user:'l.chen@contoso.com',     version:'Windows 11 22H2',compliant:true},
-    {name:'LAPTOP-OPS-11', user:'b.morrison@contoso.com', version:'Windows 10 21H1',compliant:false},
-  ],
-
   staleDevices:[
     {name:'DESKTOP-7HK2P', user:'h.davies@contoso.com',   os:'Windows 11', lastSeen:'2025-03-10', days:99, compliant:false},
     {name:'MacBook-CFO-01',user:'b.morrison@contoso.com', os:'macOS 14.3', lastSeen:'2025-03-18', days:91, compliant:true},
@@ -554,8 +505,6 @@ function renderAll(d) {
   renderComplianceTrend(d);
   renderComplianceRing(d);
   renderPlatformBars(d);
-  renderWindowsVersionChart(d);
-  renderWindowsPatchTable(d);
   renderStaleTable(d);
   renderMultiTable(d);
   renderNewDevicesTrend(d);
@@ -577,14 +526,6 @@ function renderKPIs(d) {
   document.getElementById('multi-tag').textContent        = d.multiUsers+' users';
   document.getElementById('new30-tag').textContent        = d.new30+' this period';
 
-  // Windows outdated tag
-  if (d.windowsVersions) {
-    const outdated = d.windowsVersions.filter(v=>!v.current).reduce((s,v)=>s+v.count,0);
-    const winOutTag = document.getElementById('win-outdated-tag');
-    if (outdated > 0) { winOutTag.textContent = outdated+' outdated'; winOutTag.className = 'card-tag tag-danger'; }
-    else { winOutTag.textContent = 'All current'; winOutTag.className = 'card-tag tag-success'; }
-    document.getElementById('kpi-windows-sub').textContent = outdated > 0 ? outdated+' on outdated versions' : 'all on current versions';
-  }
 }
 
 function renderComplianceTrend(d) {
@@ -613,30 +554,6 @@ function renderPlatformBars(d) {
       <div class="cb-meta"><span class="cb-name">${p.label}</span><span class="cb-val" style="color:${p.color}">${p.pct}%</span></div>
       <div class="bar-track"><div class="bar-fill" style="width:${p.pct}%;background:${p.color}"></div></div>
     </div>
-  `).join('');
-}
-
-function renderWindowsVersionChart(d) {
-  const colors = d.windowsVersions.map(v => v.current ? C.success : C.danger);
-  new Chart(document.getElementById('chart-windows-versions'), {
-    type:'bar',
-    data:{ labels:d.windowsVersions.map(v=>v.version), datasets:[{ data:d.windowsVersions.map(v=>v.count), backgroundColor:colors, borderRadius:5, borderSkipped:false }] },
-    options:{
-      indexAxis:'y', responsive:true,
-      plugins:{ legend:{display:false}, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>` ${ctx.raw} devices`, afterLabel:ctx=>d.windowsVersions[ctx.dataIndex].current?'✓ Current':'⚠ Outdated' } } },
-      scales:{ x:{grid:{color:C.border},ticks:{color:C.fgLight,font:{size:10}}}, y:{grid:{display:false},ticks:{color:C.fgLight,font:{size:10}}} },
-    },
-  });
-}
-
-function renderWindowsPatchTable(d) {
-  document.getElementById('windows-patch-tbody').innerHTML = d.windowsDevices.map(dev=>`
-    <tr>
-      <td class="mono">${dev.name}</td>
-      <td class="mono">${dev.user}</td>
-      <td><span class="pill ${dev.version.includes('24H2')||dev.version.includes('23H2') ? 'pill-success':'pill-warning'}">${dev.version}</span></td>
-      <td><span class="pill ${dev.compliant?'pill-success':'pill-danger'}">${dev.compliant?'Compliant':'Non-Compliant'}</span></td>
-    </tr>
   `).join('');
 }
 
@@ -715,7 +632,7 @@ async function graphGetAll(token, path) {
 }
 
 function destroyCharts() {
-  ['chart-compliance-trend','chart-compliance-ring','chart-windows-versions','chart-new-devices']
+  ['chart-compliance-trend','chart-compliance-ring','chart-new-devices']
     .forEach(id=>Chart.getChart(id)?.destroy());
 }
 
@@ -777,39 +694,8 @@ async function loadLiveData(token) {
     status:devs.some(d=>d.complianceState==='noncompliant')?'Non-Compliant':'Compliant',
   }));
 
-  // Windows devices + version breakdown
+  // Windows device count
   const winDevices = devices.filter(d=>(d.operatingSystem||'').includes('Windows'));
-  const versionMap={};
-  winDevices.forEach(d=>{
-    const ver = d.osVersion||'Unknown';
-    // Map build number to friendly name
-    let friendly='Unknown';
-    if(ver.startsWith('10.0.26100'))friendly='Windows 11 24H2';
-    else if(ver.startsWith('10.0.22631'))friendly='Windows 11 23H2';
-    else if(ver.startsWith('10.0.22621'))friendly='Windows 11 22H2';
-    else if(ver.startsWith('10.0.22000'))friendly='Windows 11 21H2';
-    else if(ver.startsWith('10.0.19045'))friendly='Windows 10 22H2';
-    else if(ver.startsWith('10.0.19044'))friendly='Windows 10 21H2';
-    else if(ver.startsWith('10.0.19043'))friendly='Windows 10 21H1';
-    else if(ver.startsWith('10.0.19042'))friendly='Windows 10 20H2';
-    else friendly=ver;
-    if(!versionMap[friendly])versionMap[friendly]={version:friendly,build:ver,count:0,current:['Windows 11 24H2','Windows 11 23H2'].includes(friendly)};
-    versionMap[friendly].count++;
-  });
-  const windowsVersions=Object.values(versionMap).sort((a,b)=>b.count-a.count);
-
-  const windowsDevicesTable=winDevices.slice(0,50).map(d=>{
-    let ver='Unknown';
-    if((d.osVersion||'').startsWith('10.0.26100'))ver='Windows 11 24H2';
-    else if((d.osVersion||'').startsWith('10.0.22631'))ver='Windows 11 23H2';
-    else if((d.osVersion||'').startsWith('10.0.22621'))ver='Windows 11 22H2';
-    else if((d.osVersion||'').startsWith('10.0.22000'))ver='Windows 11 21H2';
-    else if((d.osVersion||'').startsWith('10.0.19045'))ver='Windows 10 22H2';
-    else if((d.osVersion||'').startsWith('10.0.19044'))ver='Windows 10 21H2';
-    else if((d.osVersion||'').startsWith('10.0.19043'))ver='Windows 10 21H1';
-    else ver=d.osVersion||'Unknown';
-    return {name:d.deviceName,user:d.userPrincipalName,version:ver,compliant:d.complianceState==='compliant'};
-  });
 
   // Platform counts
   const platNames=['Windows','iOS','macOS','Android'],platColors=[C.info,C.success,C.primary,C.warning];
@@ -827,7 +713,7 @@ async function loadLiveData(token) {
     stale:staleDevices.length, multiUsers:multiEntries.length, avgDevicesPerUser,
     new30:new30devs.length, windows:winDevices.length, mobile,
     complianceTrend:(await fetchComplianceTrend(token)) || DEMO.complianceTrend,
-    platformCompliance, windowsVersions, windowsDevices:windowsDevicesTable,
+    platformCompliance,
     staleDevices, multiDeviceUsers,
     newDevicesDailyLabels:dailyLabels,newDevicesDailyWin:dailyWin,newDevicesDailyiOS:dailyiOS,newDevicesDailyMac:dailyMac,
   };
