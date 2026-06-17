@@ -719,6 +719,24 @@ function destroyCharts() {
     .forEach(id=>Chart.getChart(id)?.destroy());
 }
 
+async function fetchComplianceTrend(token) {
+  const r = await fetch('https://graph.microsoft.com/beta/deviceManagement/reports/getDeviceComplianceTrendReport', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name:'DeviceComplianceTrend', select:['Date','CompliantDeviceCount','NonCompliantDeviceCount'], skip:0, top:12 })
+  });
+  if (!r.ok) return null;
+  const j = await r.json();
+  const rows = (j.Values || []).sort((a,b) => a[0] > b[0] ? 1 : -1);
+  if (!rows.length) return null;
+  const colIdx = { date: j.Schema.findIndex(s=>s.Column==='Date'), compliant: j.Schema.findIndex(s=>s.Column==='CompliantDeviceCount'), nonCompliant: j.Schema.findIndex(s=>s.Column==='NonCompliantDeviceCount') };
+  return {
+    labels:      rows.map(r => r[colIdx.date]),
+    compliant:   rows.map(r => r[colIdx.compliant]),
+    nonCompliant:rows.map(r => r[colIdx.nonCompliant]),
+  };
+}
+
 async function loadLiveData(token) {
   const raw = await graphGetAll(token,
     '/deviceManagement/managedDevices?$select=id,deviceName,operatingSystem,osVersion,complianceState,enrolledDateTime,lastSyncDateTime,userPrincipalName,managedDeviceOwnerType'
@@ -808,7 +826,7 @@ async function loadLiveData(token) {
     total:devices.length, compliant, nonCompliant,
     stale:staleDevices.length, multiUsers:multiEntries.length, avgDevicesPerUser,
     new30:new30devs.length, windows:winDevices.length, mobile,
-    complianceTrend:DEMO.complianceTrend,
+    complianceTrend:(await fetchComplianceTrend(token)) || DEMO.complianceTrend,
     platformCompliance, windowsVersions, windowsDevices:windowsDevicesTable,
     staleDevices, multiDeviceUsers,
     newDevicesDailyLabels:dailyLabels,newDevicesDailyWin:dailyWin,newDevicesDailyiOS:dailyiOS,newDevicesDailyMac:dailyMac,
