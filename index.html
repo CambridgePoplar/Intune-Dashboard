@@ -451,7 +451,7 @@ const TOOLTIP = { backgroundColor:'#27355f', borderColor:'#3d4f7a', borderWidth:
 
 /* ═══════════ DEMO DATA ═══════════ */
 const DEMO = {
-  total:312, compliant:263, nonCompliant:49, stale:18, multiUsers:31, avgDevicesPerUser:2.3, new30:23, windows:198, mobile:114,
+  total:312, compliant:263, nonCompliant:49, stale:18, multiUsers:6, avgDevicesPerUser:2.3, new30:23, windows:198, mobile:114,
 
   complianceTrend:{
     labels:['Wk1','Wk2','Wk3','Wk4','Wk5','Wk6','Wk7','Wk8','Wk9','Wk10','Wk11','Wk12'],
@@ -482,15 +482,9 @@ const DEMO = {
     {user:'j.harrison@contoso.com',  count:6,win:2,ios:2,mac:1,and:1,status:'Non-Compliant'},
     {user:'a.patel@contoso.com',     count:5,win:3,ios:2,mac:0,and:0,status:'Compliant'},
     {user:'r.nguyen@contoso.com',    count:4,win:2,ios:1,mac:0,and:1,status:'Non-Compliant'},
-    {user:'k.okafor@contoso.com',    count:4,win:0,ios:2,mac:2,and:0,status:'Compliant'},
     {user:'m.espinoza@contoso.com',  count:4,win:2,ios:2,mac:0,and:0,status:'Compliant'},
     {user:'t.rodriguez@contoso.com', count:3,win:2,ios:1,mac:0,and:0,status:'Non-Compliant'},
-    {user:'l.chen@contoso.com',      count:3,win:0,ios:1,mac:2,and:0,status:'Compliant'},
-    {user:'b.morrison@contoso.com',  count:3,win:1,ios:1,mac:1,and:0,status:'Compliant'},
-    {user:'n.james@contoso.com',     count:2,win:1,ios:1,mac:0,and:0,status:'Compliant'},
     {user:'d.santos@contoso.com',    count:2,win:2,ios:0,mac:0,and:0,status:'Non-Compliant'},
-    {user:'c.walsh@contoso.com',     count:2,win:1,ios:0,mac:0,and:1,status:'Compliant'},
-    {user:'p.adams@contoso.com',     count:2,win:1,ios:1,mac:0,and:0,status:'Non-Compliant'},
   ],
 
   newDevicesDailyLabels:(()=>{ const out=[]; for(let i=29;i>=0;i--){ const d=new Date(); d.setDate(d.getDate()-i); out.push(`${d.getMonth()+1}/${d.getDate()}`); } return out; })(),
@@ -679,10 +673,10 @@ async function loadLiveData(token) {
       compliant: d.complianceState==='compliant',
     }));
 
-  // Multi-device users — ALL users with >1 device
+  // Multi-device users — users with 2+ Windows devices
   const userMap={};
   devices.forEach(d=>{ if(!userMap[d.userPrincipalName])userMap[d.userPrincipalName]=[]; userMap[d.userPrincipalName].push(d); });
-  const multiEntries=Object.entries(userMap).filter(([,devs])=>devs.length>1);
+  const multiEntries=Object.entries(userMap).filter(([,devs])=>devs.filter(d=>(d.operatingSystem||'').includes('Windows')).length>1);
   const totalDevForMulti=multiEntries.reduce((s,[,devs])=>s+devs.length,0);
   const avgDevicesPerUser=multiEntries.length?(totalDevForMulti/multiEntries.length).toFixed(1):'1.0';
   const multiDeviceUsers=multiEntries.sort((a,b)=>b[1].length-a[1].length).map(([user,devs])=>({
