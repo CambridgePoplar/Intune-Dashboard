@@ -630,22 +630,43 @@ function destroyCharts() {
     .forEach(id=>Chart.getChart(id)?.destroy());
 }
 
-async function fetchComplianceTrend(token) {
-  const r = await fetch('https://graph.microsoft.com/beta/deviceManagement/reports/getDeviceComplianceTrendReport', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name:'DeviceComplianceTrend', select:['Date','CompliantDeviceCount','NonCompliantDeviceCount'], skip:0, top:12 })
-  });
-  if (!r.ok) return null;
-  const j = await r.json();
-  const rows = (j.Values || []).sort((a,b) => a[0] > b[0] ? 1 : -1);
-  if (!rows.length) return null;
-  const colIdx = { date: j.Schema.findIndex(s=>s.Column==='Date'), compliant: j.Schema.findIndex(s=>s.Column==='CompliantDeviceCount'), nonCompliant: j.Schema.findIndex(s=>s.Column==='NonCompliantDeviceCount') };
-  return {
-    labels:      rows.map(r => r[colIdx.date]),
-    compliant:   rows.map(r => r[colIdx.compliant]),
-    nonCompliant:rows.map(r => r[colIdx.nonCompliant]),
-  };
+async function fetchComplianceTrend(token, currentCompliant, currentNonCompliant) {
+  try {
+    const reqBody = { select:['TrendDate','CompliantDeviceCount','NonCompliantDeviceCount'], skip:0, top:12, orderBy:['TrendDate asc'] };
+    console.log('[ComplianceTrend] POST body:', JSON.stringify(reqBody));
+    const r = await fetch('https://graph.microsoft.com/beta/deviceManagement/reports/getDeviceComplianceTrendReport', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(reqBody)
+    });
+    console.log('[ComplianceTrend] HTTP status:', r.status);
+    const j = await r.json();
+    console.log('[ComplianceTrend] Raw response:', JSON.stringify(j));
+    if (!r.ok) { console.warn('[ComplianceTrend] API error, falling back to demo data'); return null; }
+    const schema = j.Schema || [];
+    console.log('[ComplianceTrend] Schema columns:', schema.map(s=>s.Column));
+    const col = name => { const i = schema.findIndex(s=>s.Column===name); return i >= 0 ? i : null; };
+    const dateIdx  = col('TrendDate') ?? col('Date');
+    const compIdx  = col('CompliantDeviceCount') ?? col('CompliantCount');
+    const ncompIdx = col('NonCompliantDeviceCount') ?? col('NoncompliantDeviceCount') ?? col('NoncompliantCount');
+    console.log('[ComplianceTrend] Column indices — date:', dateIdx, 'compliant:', compIdx, 'nonCompliant:', ncompIdx);
+    const rows = (j.Values || []).sort((a,b) => a[dateIdx] > b[dateIdx] ? 1 : -1).slice(-12);
+    console.log('[ComplianceTrend] Row count:', rows.length, '| First row:', rows[0], '| Last row:', rows[rows.length-1]);
+    if (!rows.length || dateIdx === null || compIdx === null || ncompIdx === null) {
+      console.warn('[ComplianceTrend] Missing rows or columns, falling back to demo data');
+      return null;
+    }
+    const labels      = rows.map(r => r[dateIdx]);
+    const compliant   = rows.map(r => r[compIdx]);
+    const nonCompliant = rows.map(r => r[ncompIdx]);
+    compliant[compliant.length - 1]       = currentCompliant;
+    nonCompliant[nonCompliant.length - 1] = currentNonCompliant;
+    console.log('[ComplianceTrend] Success. Labels:', labels, '| Final compliant:', currentCompliant, '| Final nonCompliant:', currentNonCompliant);
+    return { labels, compliant, nonCompliant };
+  } catch(e) {
+    console.error('[ComplianceTrend] Exception:', e);
+    return null;
+  }
 }
 
 async function loadLiveData(token) {
@@ -706,7 +727,7 @@ async function loadLiveData(token) {
     total:devices.length, compliant, nonCompliant,
     stale:staleDevices.length, multiUsers:multiEntries.length, avgDevicesPerUser,
     new30:new30devs.length, windows:winDevices.length, mobile,
-    complianceTrend:(await fetchComplianceTrend(token)) || DEMO.complianceTrend,
+    complianceTrend:(await fetchComplianceTrend(token, compliant, nonCompliant)) || DEMO.complianceTrend,
     platformCompliance,
     staleDevices, multiDeviceUsers,
     newDevicesDailyLabels:dailyLabels,newDevicesDailyWin:dailyWin,newDevicesDailyiOS:dailyiOS,newDevicesDailyMac:dailyMac,
