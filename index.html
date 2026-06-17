@@ -355,16 +355,6 @@ var st,ct,ut,lt,dt,ht,pt,gt,ft,mt=function(){function t(e,t,r){this.networkInter
     <div class="card">
       <div class="card-head">
         <div>
-          <div class="card-title">Device Compliance Trend</div>
-          <div class="card-desc">Compliant vs non-compliant — active devices only, last 12 weeks</div>
-        </div>
-        <span class="card-tag tag-success">Improving</span>
-      </div>
-      <canvas id="chart-compliance-trend" height="170"></canvas>
-    </div>
-    <div class="card">
-      <div class="card-head">
-        <div>
           <div class="card-title">Compliance by Platform</div>
           <div class="card-desc">Active managed devices with assigned users</div>
         </div>
@@ -453,12 +443,6 @@ const TOOLTIP = { backgroundColor:'#27355f', borderColor:'#3d4f7a', borderWidth:
 const DEMO = {
   total:312, compliant:263, nonCompliant:49, stale:18, multiUsers:6, avgDevicesPerUser:2.3, new30:23, windows:198, mobile:114,
 
-  complianceTrend:{
-    labels:['Wk1','Wk2','Wk3','Wk4','Wk5','Wk6','Wk7','Wk8','Wk9','Wk10','Wk11','Wk12'],
-    compliant:[240,244,248,251,255,257,259,261,261,262,263,263],
-    nonCompliant:[72,68,64,61,57,55,53,51,51,50,49,49],
-  },
-
   platformCompliance:[
     {label:'Windows',pct:87,color:C.info},
     {label:'iOS',pct:91,color:C.success},
@@ -496,7 +480,6 @@ const DEMO = {
 /* ═══════════ RENDER ═══════════ */
 function renderAll(d) {
   renderKPIs(d);
-  renderComplianceTrend(d);
   renderComplianceRing(d);
   renderPlatformBars(d);
   renderStaleTable(d);
@@ -520,17 +503,6 @@ function renderKPIs(d) {
   document.getElementById('multi-tag').textContent        = d.multiUsers+' users';
   document.getElementById('new30-tag').textContent        = d.new30+' this period';
 
-}
-
-function renderComplianceTrend(d) {
-  new Chart(document.getElementById('chart-compliance-trend'), {
-    type:'line',
-    data:{ labels:d.complianceTrend.labels, datasets:[
-      {label:'Compliant',data:d.complianceTrend.compliant,borderColor:C.success,backgroundColor:'rgba(47,138,91,.08)',fill:true,tension:.35,pointRadius:3,pointBackgroundColor:C.success,borderWidth:2},
-      {label:'Non-Compliant',data:d.complianceTrend.nonCompliant,borderColor:C.danger,backgroundColor:'rgba(161,61,52,.05)',fill:true,tension:.35,pointRadius:3,pointBackgroundColor:C.danger,borderWidth:2},
-    ]},
-    options:{ responsive:true, interaction:{mode:'index',intersect:false}, plugins:{ legend:{display:true,labels:{color:C.fgLight,font:{size:11},boxWidth:10,padding:16}}, tooltip:TOOLTIP }, scales:{ x:{grid:{color:C.border},ticks:{color:C.fgLight,font:{size:10}}}, y:{grid:{color:C.border},ticks:{color:C.fgLight,font:{size:10}},beginAtZero:false} } },
-  });
 }
 
 function renderComplianceRing(d) {
@@ -626,47 +598,8 @@ async function graphGetAll(token, path) {
 }
 
 function destroyCharts() {
-  ['chart-compliance-trend','chart-compliance-ring','chart-new-devices']
+  ['chart-compliance-ring','chart-new-devices']
     .forEach(id=>Chart.getChart(id)?.destroy());
-}
-
-async function fetchComplianceTrend(token, currentCompliant, currentNonCompliant) {
-  try {
-    const reqBody = { name:'DeviceComplianceTrend', select:[], filter:'', skip:0, top:12, orderBy:[] };
-    console.log('[ComplianceTrend] POST body:', JSON.stringify(reqBody));
-    const r = await fetch('https://graph.microsoft.com/beta/deviceManagement/reports/getDeviceComplianceTrendReport', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(reqBody)
-    });
-    console.log('[ComplianceTrend] HTTP status:', r.status);
-    const j = await r.json();
-    console.log('[ComplianceTrend] Raw response:', JSON.stringify(j));
-    if (!r.ok) { console.warn('[ComplianceTrend] API error, falling back to demo data'); return null; }
-    const schema = j.Schema || [];
-    console.log('[ComplianceTrend] Schema columns:', schema.map(s=>s.Column));
-    const col = name => { const i = schema.findIndex(s=>s.Column===name); return i >= 0 ? i : null; };
-    const dateIdx  = col('TrendDate') ?? col('Date');
-    const compIdx  = col('CompliantDeviceCount') ?? col('CompliantCount');
-    const ncompIdx = col('NonCompliantDeviceCount') ?? col('NoncompliantDeviceCount') ?? col('NoncompliantCount');
-    console.log('[ComplianceTrend] Column indices — date:', dateIdx, 'compliant:', compIdx, 'nonCompliant:', ncompIdx);
-    const rows = (j.Values || []).sort((a,b) => a[dateIdx] > b[dateIdx] ? 1 : -1).slice(-12);
-    console.log('[ComplianceTrend] Row count:', rows.length, '| First row:', rows[0], '| Last row:', rows[rows.length-1]);
-    if (!rows.length || dateIdx === null || compIdx === null || ncompIdx === null) {
-      console.warn('[ComplianceTrend] Missing rows or columns, falling back to demo data');
-      return null;
-    }
-    const labels      = rows.map(r => r[dateIdx]);
-    const compliant   = rows.map(r => r[compIdx]);
-    const nonCompliant = rows.map(r => r[ncompIdx]);
-    compliant[compliant.length - 1]       = currentCompliant;
-    nonCompliant[nonCompliant.length - 1] = currentNonCompliant;
-    console.log('[ComplianceTrend] Success. Labels:', labels, '| Final compliant:', currentCompliant, '| Final nonCompliant:', currentNonCompliant);
-    return { labels, compliant, nonCompliant };
-  } catch(e) {
-    console.error('[ComplianceTrend] Exception:', e);
-    return null;
-  }
 }
 
 async function loadLiveData(token) {
@@ -727,7 +660,6 @@ async function loadLiveData(token) {
     total:devices.length, compliant, nonCompliant,
     stale:staleDevices.length, multiUsers:multiEntries.length, avgDevicesPerUser,
     new30:new30devs.length, windows:winDevices.length, mobile,
-    complianceTrend:(await fetchComplianceTrend(token, compliant, nonCompliant)) || DEMO.complianceTrend,
     platformCompliance,
     staleDevices, multiDeviceUsers,
     newDevicesDailyLabels:dailyLabels,newDevicesDailyWin:dailyWin,newDevicesDailyiOS:dailyiOS,newDevicesDailyMac:dailyMac,
