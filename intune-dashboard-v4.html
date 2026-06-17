@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Intune Device Dashboard</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
+  <style>
+    :root {
+      --color-bg: #ffffff;
+      --color-surface: #f9f9f9;
+      --color-surface2: #27355f;
+      --color-primary: #9f2671;
+      --color-accent: #fff4ec;
+      --color-border: #fffbf0;
+      --color-border-strong: #edeef7;
+      --color-surface-8: #f5f6f6;
+      --color-fg: #27355f;
+      --color-fg-muted: #cc539e;
+      --color-fg-inverse: #008000;
+      --color-fg-4: #000000;
+      --color-fg-5: #9f2671;
+      --color-fg-6: #333333;
+      --color-fg-7: #ffffff;
+      --color-fg-8: #b9408b;
+      --color-on-primary: #FFFFFF;
+      --color-on-accent: #000000;
+      --color-primary-hover: #901762;
+      --color-primary-active: #860d58;
+      --color-info: #2868A8;
+      --color-on-info: #FFFFFF;
+      --color-success: #2F8A5B;
+      --color-on-success: #FFFFFF;
+      --color-warning: #9E7422;
+      --color-on-warning: #FFFFFF;
+      --color-danger: #A13D34;
+      --color-on-danger: #FFFFFF;
+      --color-focus-ring: #9f2671;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--color-bg);
+      color: var(--color-fg);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--color-surface2);
+      border-bottom: 1px solid var(--color-border-strong);
+      padding: 14px 28px;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .hd-left { display: flex; align-items: center; gap: 12px; }
+    .logo {
+      width: 32px; height: 32px; border-radius: 7px; flex-shrink: 0;
+      background: var(--color-primary);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; font-weight: 800; color: var(--color-on-primary);
+    }
+    .hd-title { font-size: 14px; font-weight: 700; color: var(--color-fg-7); }
+    .hd-sub   { font-size: 11px; color: rgba(255,255,255,.55); margin-top: 1px; }
+    .hd-right { display: flex; align-items: center; gap: 10px; }
+    .badge {
+      font-size: 10px; font-weight: 700; letter-spacing: .5px;
+      padding: 3px 9px; border-radius: 20px;
+    }
+    .badge-demo { background: rgba(255,255,255,.1); color: rgba(255,255,255,.7); border: 1px solid rgba(255,255,255,.2); }
+    .badge-live { background: rgba(47,138,91,.2); color: #4ade80; border: 1px solid rgba(47,138,91,.4); }
+    .sync-time  { font-size: 11px; color: rgba(255,255,255,.5); }
+    .btn-connect {
+      background: var(--color-primary); color: var(--color-on-primary);
+      border: none; cursor: pointer; border-radius: 7px;
+      font-size: 12px; font-weight: 600; padding: 7px 14px;
+    }
+    .btn-connect:hover { background: var(--color-primary-hover); }
+
+    /* ── Main ── */
+    main { padding: 22px 28px; max-width: 1600px; margin: 0 auto; }
+
+    .section-eyebrow {
+      font-size: 10px; font-weight: 700; letter-spacing: 1.4px;
+      text-transform: uppercase; color: var(--color-fg-muted);
+      margin: 28px 0 12px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .section-eyebrow::after {
+      content: ''; flex: 1; height: 1px; background: var(--color-border-strong);
+    }
+    .section-eyebrow:first-child { margin-top: 0; }
+
+    /* ── KPI strip ── */
+    .kpi-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+    .kpi-card {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border-strong);
+      border-radius: 10px;
+      padding: 18px 20px;
+      position: relative; overflow: hidden;
+    }
+    .kpi-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    }
+    .kpi-card.c-primary::before { background: var(--color-primary); }
+    .kpi-card.c-success::before { background: var(--color-success); }
+    .kpi-card.c-warning::before { background: var(--color-warning); }
+    .kpi-card.c-info::before    { background: var(--color-info); }
+
+    .kpi-label  { font-size: 11px; color: var(--color-fg-muted); margin-bottom: 8px; font-weight: 500; }
+    .kpi-value  { font-size: 36px; font-weight: 800; line-height: 1; letter-spacing: -1px; color: var(--color-fg); }
+    .kpi-value.c-primary { color: var(--color-primary); }
+    .kpi-value.c-success { color: var(--color-success); }
+    .kpi-value.c-warning { color: var(--color-warning); }
+    .kpi-value.c-info    { color: var(--color-info); }
+    .kpi-sub { font-size: 11px; color: var(--color-fg-muted); margin-top: 7px; }
+    .kpi-sub .pos { color: var(--color-success); font-weight: 600; }
+    .kpi-sub .neg { color: var(--color-danger);  font-weight: 600; }
+
+    /* ── Grids ── */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .grid-3 { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 14px; }
+
+    .card {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border-strong);
+      border-radius: 10px;
+      padding: 20px 22px;
+    }
+    .card-head {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      margin-bottom: 18px;
+    }
+    .card-title { font-size: 13px; font-weight: 700; color: var(--color-fg); }
+    .card-desc  { font-size: 11px; color: var(--color-fg-muted); margin-top: 3px; }
+
+    .card-tag {
+      font-size: 10px; font-weight: 600; padding: 3px 10px;
+      border-radius: 20px; white-space: nowrap;
+    }
+    .tag-danger  { background: rgba(161,61,52,.08);  color: var(--color-danger);  border: 1px solid rgba(161,61,52,.2); }
+    .tag-success { background: rgba(47,138,91,.08);  color: var(--color-success); border: 1px solid rgba(47,138,91,.2); }
+    .tag-warning { background: rgba(158,116,34,.08); color: var(--color-warning); border: 1px solid rgba(158,116,34,.2); }
+    .tag-info    { background: rgba(40,104,168,.08); color: var(--color-info);    border: 1px solid rgba(40,104,168,.2); }
+    .tag-primary { background: rgba(159,38,113,.08); color: var(--color-primary); border: 1px solid rgba(159,38,113,.2); }
+
+    /* ── Compliance ring ── */
+    .compliance-wrap { display: flex; align-items: center; gap: 28px; }
+    .ring-container  { position: relative; flex-shrink: 0; }
+    .ring-label {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center; pointer-events: none;
+    }
+    .ring-pct  { font-size: 28px; font-weight: 800; color: var(--color-success); line-height: 1; }
+    .ring-word { font-size: 10px; color: var(--color-fg-muted); margin-top: 2px; }
+    .compliance-breakdown { flex: 1; display: flex; flex-direction: column; gap: 12px; }
+    .cb-row { display: flex; flex-direction: column; gap: 5px; }
+    .cb-meta { display: flex; justify-content: space-between; font-size: 11px; }
+    .cb-meta .cb-name { color: var(--color-fg-muted); }
+    .cb-meta .cb-val  { font-weight: 700; color: var(--color-fg); }
+    .bar-track { height: 5px; background: var(--color-border-strong); border-radius: 5px; overflow: hidden; }
+    .bar-fill  { height: 100%; border-radius: 5px; }
+
+    /* ── Multi-device table ── */
+    .multi-table { width: 100%; border-collapse: collapse; }
+    .multi-table th {
+      font-size: 10px; font-weight: 700; letter-spacing: .8px;
+      text-transform: uppercase; color: var(--color-fg-muted);
+      text-align: left; padding-bottom: 10px;
+      border-bottom: 2px solid var(--color-border-strong);
+    }
+    .multi-table td {
+      padding: 9px 0; font-size: 12px;
+      border-bottom: 1px solid var(--color-border-strong);
+      vertical-align: middle; color: var(--color-fg);
+    }
+    .multi-table tr:last-child td { border-bottom: none; }
+    .mono { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 11px; color: var(--color-fg-6); }
+
+    .device-dots { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+    .dot {
+      width: 22px; height: 22px; border-radius: 5px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700;
+    }
+    .dot-win { background: rgba(40,104,168,.1);  color: var(--color-info);    border: 1px solid rgba(40,104,168,.2); }
+    .dot-ios { background: rgba(47,138,91,.1);   color: var(--color-success); border: 1px solid rgba(47,138,91,.2); }
+    .dot-mac { background: rgba(159,38,113,.1);  color: var(--color-primary); border: 1px solid rgba(159,38,113,.2); }
+    .dot-and { background: rgba(158,116,34,.1);  color: var(--color-warning); border: 1px solid rgba(158,116,34,.2); }
+
+    .pill {
+      display: inline-block; font-size: 10px; font-weight: 600;
+      padding: 2px 9px; border-radius: 20px;
+    }
+    .pill-success { background: rgba(47,138,91,.08);  color: var(--color-success); border: 1px solid rgba(47,138,91,.2); }
+    .pill-danger  { background: rgba(161,61,52,.08);  color: var(--color-danger);  border: 1px solid rgba(161,61,52,.2); }
+    .pill-info    { background: rgba(40,104,168,.08); color: var(--color-info);    border: 1px solid rgba(40,104,168,.2); }
+    .pill-warning { background: rgba(158,116,34,.08); color: var(--color-warning); border: 1px solid rgba(158,116,34,.2); }
+
+    /* ── New devices list ── */
+    .new-dev-list { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+    .new-dev-row {
+      display: flex; align-items: center; gap: 12px;
+      background: var(--color-bg);
+      border: 1px solid var(--color-border-strong);
+      border-radius: 8px; padding: 9px 12px;
+    }
+    .dev-icon {
+      width: 32px; height: 32px; border-radius: 7px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; flex-shrink: 0;
+    }
+    .dev-icon.win { background: rgba(40,104,168,.08); }
+    .dev-icon.ios { background: rgba(47,138,91,.08); }
+    .dev-icon.mac { background: rgba(159,38,113,.08); }
+    .dev-icon.and { background: rgba(158,116,34,.08); }
+    .dev-body { flex: 1; min-width: 0; }
+    .dev-name { font-size: 12px; font-weight: 600; color: var(--color-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dev-user { font-size: 11px; color: var(--color-fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dev-meta { text-align: right; flex-shrink: 0; }
+    .dev-days { font-size: 11px; color: var(--color-fg-muted); margin-top: 3px; }
+
+    /* ── Auth Modal ── */
+    #auth-modal {
+      display: none; position: fixed; inset: 0; z-index: 999;
+      background: rgba(39,53,95,.6); align-items: center; justify-content: center;
+    }
+    #auth-modal.show { display: flex; }
+    .modal-box {
+      background: var(--color-bg);
+      border: 1px solid var(--color-border-strong);
+      border-radius: 12px; padding: 28px 32px; width: 420px; max-width: 95vw;
+      box-shadow: 0 20px 60px rgba(39,53,95,.2);
+    }
+    .modal-title { font-size: 16px; font-weight: 700; color: var(--color-fg); margin-bottom: 4px; }
+    .modal-sub   { font-size: 12px; color: var(--color-fg-muted); margin-bottom: 20px; }
+    .perms-box {
+      background: var(--color-accent);
+      border: 1px solid rgba(159,38,113,.15);
+      border-radius: 7px; padding: 10px 13px; font-size: 11px;
+      color: var(--color-fg-muted); margin-bottom: 18px; line-height: 1.7;
+    }
+    .perms-box strong { color: var(--color-primary); display: block; margin-bottom: 3px; font-size: 10px; letter-spacing: .5px; text-transform: uppercase; }
+    .inp-group { margin-bottom: 13px; }
+    .inp-group label {
+      display: block; font-size: 10px; font-weight: 700; letter-spacing: .6px;
+      text-transform: uppercase; color: var(--color-fg-muted); margin-bottom: 5px;
+    }
+    .inp-group input {
+      width: 100%; background: var(--color-surface);
+      border: 1px solid var(--color-border-strong);
+      border-radius: 7px; color: var(--color-fg); padding: 8px 12px; font-size: 13px;
+    }
+    .inp-group input:focus { outline: 2px solid var(--color-focus-ring); outline-offset: 1px; border-color: var(--color-primary); }
+    .modal-btns { display: flex; gap: 10px; margin-top: 18px; }
+    .btn-ghost {
+      flex: 1; background: transparent; color: var(--color-fg-muted);
+      border: 1px solid var(--color-border-strong); border-radius: 7px; padding: 9px;
+      font-size: 13px; cursor: pointer;
+    }
+    .btn-ghost:hover { border-color: var(--color-primary); color: var(--color-primary); }
+    .btn-modal-primary {
+      flex: 1; background: var(--color-primary); color: var(--color-on-primary);
+      border: none; border-radius: 7px; padding: 9px;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    .btn-modal-primary:hover { background: var(--color-primary-hover); }
+    .btn-modal-primary:active { background: var(--color-primary-active); }
+    #auth-err { color: var(--color-danger); font-size: 11px; margin-top: 8px; display: none; }
+
+    /* ── Responsive ── */
+    @media (max-width: 1000px) {
+      .kpi-strip { grid-template-columns: repeat(2, 1fr); }
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 600px) {
+      main   { padding: 16px; }
+      header { padding: 12px 16px; }
+      .kpi-strip { grid-template-columns: 1fr 1fr; }
+    }
+
+    footer {
+      text-align: center; padding: 20px; font-size: 11px;
+      color: var(--color-fg-muted);
+      border-top: 1px solid var(--color-border-strong);
+      margin-top: 32px;
+    }
+    footer a { color: var(--color-primary); text-decoration: none; }
+    footer a:hover { color: var(--color-primary-hover); }
+  </style>
+</head>
+<body>
+
+<!-- Auth Modal -->
+<div id="auth-modal">
+  <div class="modal-box">
+    <div class="modal-title">Connect to Intune</div>
+    <div class="modal-sub">Sign in with your Microsoft work account to pull live data</div>
+    <div class="perms-box">
+      <strong>What this requests access to</strong>
+      Read-only access to managed devices, compliance policies, and user information via Microsoft Graph API. No changes will be made to your environment.
+    </div>
+    <div class="inp-group">
+      <label>Client ID (App Registration)</label>
+      <input type="text" id="inp-client" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+      <div style="font-size:10px;color:var(--color-fg-muted);margin-top:4px;">Azure AD → App registrations → your app → Application (client) ID</div>
+    </div>
+    <div class="inp-group">
+      <label>Tenant ID <span style="font-weight:400;text-transform:none;">(optional — leave blank for auto-detect)</span></label>
+      <input type="text" id="inp-tenant" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+    </div>
+    <div class="modal-btns">
+      <button class="btn-ghost" onclick="closeModal()">Use Demo Data</button>
+      <button class="btn-modal-primary" id="btn-connect" onclick="connectGraph()">Sign in with Microsoft</button>
+    </div>
+    <div id="auth-err" style="color:var(--color-danger);font-size:11px;margin-top:8px;display:none;"></div>
+    <div style="font-size:10px;color:var(--color-fg-muted);margin-top:14px;line-height:1.6;border-top:1px solid var(--color-border-strong);padding-top:12px;">
+      <strong style="color:var(--color-fg)">One-time Azure setup required:</strong> In your app registration → Authentication → Add platform → Single-page application → add your dashboard URL as a redirect URI. Set permissions to DeviceManagementManagedDevices.Read.All, DeviceManagementConfiguration.Read.All, User.Read.All with admin consent granted.
+    </div>
+  </div>
+</div>
+
+<!-- Header -->
+<header>
+  <div class="hd-left">
+    <div class="logo">M</div>
+    <div>
+      <div class="hd-title">Intune Device Dashboard</div>
+      <div class="hd-sub" id="org-label">Microsoft Endpoint Management · Demo Data</div>
+    </div>
+  </div>
+  <div class="hd-right">
+    <span class="sync-time" id="sync-label">Synced: just now</span>
+    <span class="badge badge-demo" id="mode-badge">DEMO</span>
+    <button class="btn-connect" onclick="openModal()">Connect Graph API</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- KPIs -->
+  <div class="section-eyebrow">At a glance</div>
+  <div class="kpi-strip">
+    <div class="kpi-card c-info">
+      <div class="kpi-label">Total Managed Devices</div>
+      <div class="kpi-value c-info" id="kpi-total">847</div>
+      <div class="kpi-sub"><span class="pos">▲ 23</span> enrolled this month</div>
+    </div>
+    <div class="kpi-card c-success">
+      <div class="kpi-label">Overall Compliance</div>
+      <div class="kpi-value c-success" id="kpi-compliance-pct">84.3%</div>
+      <div class="kpi-sub"><span class="pos">▲ 2.1%</span> vs last cycle</div>
+    </div>
+    <div class="kpi-card c-warning">
+      <div class="kpi-label">Users w/ Multiple Devices</div>
+      <div class="kpi-value c-warning" id="kpi-multi">94</div>
+      <div class="kpi-sub">avg <span id="kpi-avg-devs">2.4</span> devices per user</div>
+    </div>
+    <div class="kpi-card c-primary">
+      <div class="kpi-label">New Devices (Last 30 Days)</div>
+      <div class="kpi-value c-primary" id="kpi-new30">23</div>
+      <div class="kpi-sub"><span class="pos">▲ 5</span> vs prior 30 days</div>
+    </div>
+  </div>
+
+  <!-- Compliance -->
+  <div class="section-eyebrow">Compliance</div>
+  <div class="grid-2">
+
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <div class="card-title">Device Compliance Trend</div>
+          <div class="card-desc">Compliant vs non-compliant over the last 12 weeks</div>
+        </div>
+        <span class="card-tag tag-success">Improving</span>
+      </div>
+      <canvas id="chart-compliance-trend" height="170"></canvas>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <div class="card-title">Compliance by Platform</div>
+          <div class="card-desc">Current compliance rate per OS</div>
+        </div>
+        <span class="card-tag tag-danger" id="noncompliant-tag">133 non-compliant</span>
+      </div>
+      <div class="compliance-wrap">
+        <div class="ring-container">
+          <canvas id="chart-compliance-ring" width="140" height="140"></canvas>
+          <div class="ring-label">
+            <div class="ring-pct" id="ring-pct">84%</div>
+            <div class="ring-word">compliant</div>
+          </div>
+        </div>
+        <div class="compliance-breakdown" id="platform-bars"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Enrollment & Asset Sprawl -->
+  <div class="section-eyebrow">Enrollment &amp; Asset Sprawl</div>
+  <div class="grid-2">
+
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <div class="card-title">New Device Enrollments — Last 30 Days</div>
+          <div class="card-desc">Daily enrollment count by platform</div>
+        </div>
+        <span class="card-tag tag-primary" id="new30-tag">23 this period</span>
+      </div>
+      <canvas id="chart-new-devices" height="170"></canvas>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <div class="card-title">Users with Multiple Devices</div>
+          <div class="card-desc">Top users by managed device count</div>
+        </div>
+        <span class="card-tag tag-warning" id="multi-tag">94 users</span>
+      </div>
+      <table class="multi-table">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Devices</th>
+            <th>Platforms</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="multi-tbody"></tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- Recent Enrollments -->
+  <div class="section-eyebrow">Recent Enrollments</div>
+  <div class="grid-3">
+
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <div class="card-title">Recently Enrolled Devices</div>
+          <div class="card-desc">Newest managed devices in the last 30 days</div>
+        </div>
+      </div>
+      <div class="new-dev-list" id="new-dev-list"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <div class="card-title">Enrollment Mix</div>
+          <div class="card-desc">New enrollments by platform</div>
+        </div>
+      </div>
+      <canvas id="chart-enroll-donut" height="170"></canvas>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <div class="card-title">Device Count Distribution</div>
+          <div class="card-desc">Users grouped by number of devices</div>
+        </div>
+      </div>
+      <canvas id="chart-multi-dist" height="170"></canvas>
+    </div>
+
+  </div>
+
+</main>
+
+<footer>
+  Intune Device Dashboard &nbsp;·&nbsp;
+  Powered by <a href="https://learn.microsoft.com/en-us/graph/api/resources/intune-devices-manageddevice" target="_blank">Microsoft Graph API</a>
+  &nbsp;·&nbsp; Demo mode active — connect Graph API for live data
+</footer>
+
+<script>
+/* ═══════════════════════════════
+   CHART PALETTE — drawn from CSS vars
+═══════════════════════════════ */
+const C = {
+  info:    '#2868A8',
+  success: '#2F8A5B',
+  warning: '#9E7422',
+  danger:  '#A13D34',
+  primary: '#9f2671',
+  muted:   '#cc539e',
+  border:  '#edeef7',
+  fg:      '#27355f',
+  fgLight: '#6b7a99',
+};
+
+const TOOLTIP = {
+  backgroundColor: '#27355f',
+  borderColor: '#3d4f7a',
+  borderWidth: 1,
+  titleColor: '#ffffff',
+  bodyColor: 'rgba(255,255,255,.7)',
+  padding: 10,
+};
+
+/* ═══════════════════════════════
+   DEMO DATA
+═══════════════════════════════ */
+const DEMO = {
+  total: 847,
+  compliant: 714,
+  nonCompliant: 133,
+  multiUsers: 94,
+  avgDevicesPerUser: 2.4,
+  new30: 23,
+  new30prev: 18,
+
+  complianceTrend: {
+    labels: ['Wk1','Wk2','Wk3','Wk4','Wk5','Wk6','Wk7','Wk8','Wk9','Wk10','Wk11','Wk12'],
+    compliant:    [640,648,655,661,670,674,682,690,695,703,710,714],
+    nonCompliant: [207,199,192,185,177,171,162,155,149,141,136,133],
+  },
+
+  platformCompliance: [
+    { label: 'Windows', pct: 87, color: C.info    },
+    { label: 'iOS',     pct: 91, color: C.success  },
+    { label: 'macOS',   pct: 79, color: C.primary  },
+    { label: 'Android', pct: 71, color: C.warning  },
+  ],
+
+  newDevicesDailyLabels: (() => {
+    const out = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      out.push(`${d.getMonth()+1}/${d.getDate()}`);
+    }
+    return out;
+  })(),
+  newDevicesDailyWin: [0,1,0,2,1,0,0,1,0,1,2,0,1,0,0,2,1,0,1,0,1,0,2,1,0,0,1,0,1,1],
+  newDevicesDailyiOS: [1,0,1,0,0,1,0,0,1,0,0,1,0,1,0,0,0,1,0,1,0,1,0,0,1,0,0,1,0,0],
+  newDevicesDailyMac: [0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,1,0,0,0,0,1,0,0,0,0,0,1],
+
+  enrollMix: {
+    labels: ['Windows','iOS','macOS','Android'],
+    counts: [11,7,4,1],
+    colors: [C.info, C.success, C.primary, C.warning],
+  },
+
+  multiDist: {
+    labels: ['2 devices','3 devices','4 devices','5 devices','6+ devices'],
+    counts: [52,24,12,4,2],
+    colors: [C.info, C.success, C.primary, C.warning, C.danger],
+  },
+
+  multiDeviceUsers: [
+    { user: 'j.harrison@contoso.com',  count: 6, win:2, ios:2, mac:1, and:1, status:'Non-Compliant' },
+    { user: 'a.patel@contoso.com',     count: 5, win:3, ios:2, mac:0, and:0, status:'Compliant'     },
+    { user: 'r.nguyen@contoso.com',    count: 4, win:2, ios:1, mac:0, and:1, status:'Non-Compliant' },
+    { user: 'k.okafor@contoso.com',    count: 4, win:0, ios:2, mac:2, and:0, status:'Compliant'     },
+    { user: 'm.espinoza@contoso.com',  count: 4, win:2, ios:2, mac:0, and:0, status:'Compliant'     },
+    { user: 't.rodriguez@contoso.com', count: 3, win:2, ios:1, mac:0, and:0, status:'Non-Compliant' },
+    { user: 'l.chen@contoso.com',      count: 3, win:0, ios:1, mac:2, and:0, status:'Compliant'     },
+    { user: 'b.morrison@contoso.com',  count: 3, win:1, ios:1, mac:1, and:0, status:'Compliant'     },
+  ],
+
+  recentDevices: [
+    { name:'DESKTOP-7HK2P',   user:'c.walsh@contoso.com',    os:'win', osLabel:'Windows 11',  daysAgo:1  },
+    { name:'iPhone-CWalsh',   user:'c.walsh@contoso.com',    os:'ios', osLabel:'iOS 17.4',    daysAgo:2  },
+    { name:'MacBook-CTO-02',  user:'b.morrison@contoso.com', os:'mac', osLabel:'macOS 14.4',  daysAgo:3  },
+    { name:'LAPTOP-ONBOARD3', user:'n.james@contoso.com',    os:'win', osLabel:'Windows 11',  daysAgo:5  },
+    { name:'Pixel-8-NJames',  user:'n.james@contoso.com',    os:'and', osLabel:'Android 14',  daysAgo:5  },
+    { name:'LAPTOP-SEC-08',   user:'a.patel@contoso.com',    os:'win', osLabel:'Windows 11',  daysAgo:8  },
+    { name:'iPad-HR-12',      user:'k.okafor@contoso.com',   os:'ios', osLabel:'iPadOS 17.4', daysAgo:11 },
+    { name:'MacBook-Dev-03',  user:'r.nguyen@contoso.com',   os:'mac', osLabel:'macOS 14.3',  daysAgo:14 },
+  ],
+};
+
+/* ═══════════════════════════════
+   RENDER
+═══════════════════════════════ */
+function renderAll(d) {
+  renderKPIs(d);
+  renderComplianceTrend(d);
+  renderComplianceRing(d);
+  renderPlatformBars(d);
+  renderNewDevicesTrend(d);
+  renderMultiTable(d);
+  renderNewDevList(d);
+  renderEnrollDonut(d);
+  renderMultiDist(d);
+}
+
+function renderKPIs(d) {
+  document.getElementById('kpi-total').textContent          = d.total.toLocaleString();
+  document.getElementById('kpi-compliance-pct').textContent = ((d.compliant/d.total)*100).toFixed(1)+'%';
+  document.getElementById('kpi-multi').textContent          = d.multiUsers;
+  document.getElementById('kpi-avg-devs').textContent       = d.avgDevicesPerUser;
+  document.getElementById('kpi-new30').textContent          = d.new30;
+  document.getElementById('ring-pct').textContent           = Math.round(d.compliant/d.total*100)+'%';
+  document.getElementById('noncompliant-tag').textContent   = d.nonCompliant+' non-compliant';
+  document.getElementById('new30-tag').textContent          = d.new30+' this period';
+  document.getElementById('multi-tag').textContent          = d.multiUsers+' users';
+}
+
+function renderComplianceTrend(d) {
+  new Chart(document.getElementById('chart-compliance-trend'), {
+    type: 'line',
+    data: {
+      labels: d.complianceTrend.labels,
+      datasets: [
+        {
+          label: 'Compliant',
+          data: d.complianceTrend.compliant,
+          borderColor: C.success, backgroundColor: 'rgba(47,138,91,.08)',
+          fill: true, tension: .35, pointRadius: 3,
+          pointBackgroundColor: C.success, borderWidth: 2,
+        },
+        {
+          label: 'Non-Compliant',
+          data: d.complianceTrend.nonCompliant,
+          borderColor: C.danger, backgroundColor: 'rgba(161,61,52,.05)',
+          fill: true, tension: .35, pointRadius: 3,
+          pointBackgroundColor: C.danger, borderWidth: 2,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      interaction: { mode:'index', intersect:false },
+      plugins: {
+        legend: { display:true, labels:{ color: C.fgLight, font:{ size:11 }, boxWidth:10, padding:16 } },
+        tooltip: TOOLTIP,
+      },
+      scales: {
+        x: { grid:{ color: C.border }, ticks:{ color: C.fgLight, font:{ size:10 } } },
+        y: { grid:{ color: C.border }, ticks:{ color: C.fgLight, font:{ size:10 } }, beginAtZero:false },
+      },
+    },
+  });
+}
+
+function renderComplianceRing(d) {
+  const pct = Math.round(d.compliant/d.total*100);
+  new Chart(document.getElementById('chart-compliance-ring'), {
+    type: 'doughnut',
+    data: {
+      datasets: [{
+        data: [pct, 100-pct],
+        backgroundColor: [C.success, C.border],
+        borderColor: [C.success, C.border],
+        borderWidth: 0,
+        hoverOffset: 0,
+      }],
+    },
+    options: {
+      responsive: false, cutout:'72%',
+      plugins: { legend:{ display:false }, tooltip:{ enabled:false } },
+      animation: { duration:900, easing:'easeOutQuart' },
+    },
+  });
+}
+
+function renderPlatformBars(d) {
+  document.getElementById('platform-bars').innerHTML = d.platformCompliance.map(p => `
+    <div class="cb-row">
+      <div class="cb-meta">
+        <span class="cb-name">${p.label}</span>
+        <span class="cb-val" style="color:${p.color}">${p.pct}%</span>
+      </div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:${p.pct}%;background:${p.color}"></div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderNewDevicesTrend(d) {
+  new Chart(document.getElementById('chart-new-devices'), {
+    type: 'bar',
+    data: {
+      labels: d.newDevicesDailyLabels,
+      datasets: [
+        { label:'Windows', data:d.newDevicesDailyWin, backgroundColor: C.info+'cc',    borderRadius:3, borderSkipped:false },
+        { label:'iOS',     data:d.newDevicesDailyiOS, backgroundColor: C.success+'cc', borderRadius:3, borderSkipped:false },
+        { label:'macOS',   data:d.newDevicesDailyMac, backgroundColor: C.primary+'cc', borderRadius:3, borderSkipped:false },
+      ],
+    },
+    options: {
+      responsive: true,
+      interaction: { mode:'index', intersect:false },
+      plugins: {
+        legend: { display:true, labels:{ color: C.fgLight, font:{ size:11 }, boxWidth:10, padding:14 } },
+        tooltip: TOOLTIP,
+      },
+      scales: {
+        x: { stacked:true, grid:{ display:false }, ticks:{ color: C.fgLight, font:{ size:9 }, maxTicksLimit:10, maxRotation:0 } },
+        y: { stacked:true, grid:{ color: C.border }, ticks:{ color: C.fgLight, font:{ size:10 }, stepSize:1 }, beginAtZero:true },
+      },
+    },
+  });
+}
+
+function renderMultiTable(d) {
+  document.getElementById('multi-tbody').innerHTML = d.multiDeviceUsers.map(u => {
+    const dots = [
+      ...Array(u.win).fill(`<div class="dot dot-win" title="Windows">W</div>`),
+      ...Array(u.ios).fill(`<div class="dot dot-ios" title="iOS">i</div>`),
+      ...Array(u.mac).fill(`<div class="dot dot-mac" title="macOS">M</div>`),
+      ...Array(u.and).fill(`<div class="dot dot-and" title="Android">A</div>`),
+    ].join('');
+    const pillCls = u.status === 'Compliant' ? 'pill-success' : 'pill-danger';
+    return `<tr>
+      <td class="mono">${u.user}</td>
+      <td><strong style="font-size:15px;color:var(--color-fg)">${u.count}</strong></td>
+      <td><div class="device-dots">${dots}</div></td>
+      <td><span class="pill ${pillCls}">${u.status}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderNewDevList(d) {
+  const osEmoji = { win:'🖥️', ios:'📱', mac:'💻', and:'🤖' };
+  document.getElementById('new-dev-list').innerHTML = d.recentDevices.map(dev => `
+    <div class="new-dev-row">
+      <div class="dev-icon ${dev.os}">${osEmoji[dev.os]}</div>
+      <div class="dev-body">
+        <div class="dev-name">${dev.name}</div>
+        <div class="dev-user">${dev.user}</div>
+      </div>
+      <div class="dev-meta">
+        <span class="pill pill-info">${dev.osLabel}</span>
+        <div class="dev-days">${dev.daysAgo === 1 ? 'Today' : dev.daysAgo+'d ago'}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderEnrollDonut(d) {
+  new Chart(document.getElementById('chart-enroll-donut'), {
+    type: 'doughnut',
+    data: {
+      labels: d.enrollMix.labels,
+      datasets: [{
+        data: d.enrollMix.counts,
+        backgroundColor: d.enrollMix.colors,
+        borderColor: '#f9f9f9',
+        borderWidth: 3,
+        hoverOffset: 6,
+      }],
+    },
+    options: {
+      responsive: true, cutout:'60%',
+      plugins: {
+        legend: { display:true, position:'bottom', labels:{ color: C.fgLight, font:{ size:10 }, padding:12, boxWidth:10 } },
+        tooltip: { ...TOOLTIP, callbacks:{ label: ctx => ` ${ctx.label}: ${ctx.raw} devices` } },
+      },
+    },
+  });
+}
+
+function renderMultiDist(d) {
+  new Chart(document.getElementById('chart-multi-dist'), {
+    type: 'bar',
+    data: {
+      labels: d.multiDist.labels,
+      datasets: [{
+        data: d.multiDist.counts,
+        backgroundColor: d.multiDist.colors,
+        borderRadius: 5, borderSkipped: false,
+      }],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display:false },
+        tooltip: { ...TOOLTIP, callbacks:{ label: ctx => ` ${ctx.raw} users` } },
+      },
+      scales: {
+        x: { grid:{ display:false }, ticks:{ color: C.fgLight, font:{ size:10 }, maxRotation:25 } },
+        y: { grid:{ color: C.border }, ticks:{ color: C.fgLight, font:{ size:10 } }, beginAtZero:true },
+      },
+    },
+  });
+}
+
+/* ═══════════════════════════════
+   MSAL AUTH
+═══════════════════════════════ */
+let msalInstance = null;
+let accessToken  = null;
+
+const SCOPES = [
+  'https://graph.microsoft.com/DeviceManagementManagedDevices.Read.All',
+  'https://graph.microsoft.com/DeviceManagementConfiguration.Read.All',
+  'https://graph.microsoft.com/User.Read.All',
+  'https://graph.microsoft.com/Directory.Read.All',
+];
+
+function initMsal(clientId, tenantId) {
+  const authority = tenantId
+    ? `https://login.microsoftonline.com/${tenantId}`
+    : 'https://login.microsoftonline.com/organizations';
+
+  msalInstance = new msal.PublicClientApplication({
+    auth: {
+      clientId,
+      authority,
+      redirectUri: window.location.origin + window.location.pathname,
+    },
+    cache: { cacheLocation: 'sessionStorage' },
+  });
+}
+
+async function getToken() {
+  // Try silent first (cached session)
+  const accounts = msalInstance.getAllAccounts();
+  if (accounts.length > 0) {
+    try {
+      const result = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: accounts[0] });
+      return result.accessToken;
+    } catch (e) { /* fall through to popup */ }
+  }
+  // Popup sign-in
+  const result = await msalInstance.acquireTokenPopup({ scopes: SCOPES });
+  return result.accessToken;
+}
+
+async function graphGetAll(token, path) {
+  let results = [], url = `https://graph.microsoft.com/v1.0${path}`;
+  while (url) {
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!r.ok) throw new Error(`Graph API error: HTTP ${r.status} on ${path}`);
+    const j = await r.json();
+    results = results.concat(j.value || []);
+    url = j['@odata.nextLink'] || null;
+  }
+  return results;
+}
+
+function destroyCharts() {
+  ['chart-compliance-trend','chart-compliance-ring','chart-new-devices','chart-enroll-donut','chart-multi-dist']
+    .forEach(id => Chart.getChart(id)?.destroy());
+}
+
+async function loadLiveData(token) {
+  const devices = await graphGetAll(token,
+    '/deviceManagement/managedDevices?$select=id,deviceName,operatingSystem,osVersion,complianceState,enrolledDateTime,lastSyncDateTime,userPrincipalName,managedDeviceOwnerType'
+  );
+
+  const now = Date.now(), dayMs = 86400000;
+  const compliant    = devices.filter(d => d.complianceState === 'compliant').length;
+  const nonCompliant = devices.filter(d => d.complianceState === 'noncompliant').length;
+  const cutoff30 = now - 30*dayMs, cutoff60 = now - 60*dayMs;
+  const new30devs = devices.filter(d => new Date(d.enrolledDateTime).getTime() > cutoff30);
+  const new30prev = devices.filter(d => { const t = new Date(d.enrolledDateTime).getTime(); return t > cutoff60 && t <= cutoff30; }).length;
+
+  const userMap = {};
+  devices.forEach(d => {
+    if (!d.userPrincipalName) return;
+    if (!userMap[d.userPrincipalName]) userMap[d.userPrincipalName] = [];
+    userMap[d.userPrincipalName].push(d);
+  });
+  const multiEntries = Object.entries(userMap).filter(([,devs]) => devs.length > 1);
+  const totalDevForMulti = multiEntries.reduce((s,[,devs]) => s+devs.length, 0);
+  const avgDevicesPerUser = multiEntries.length ? (totalDevForMulti/multiEntries.length).toFixed(1) : '1.0';
+
+  const multiDeviceUsers = multiEntries
+    .sort((a,b) => b[1].length-a[1].length).slice(0,8)
+    .map(([user,devs]) => ({
+      user, count: devs.length,
+      win: devs.filter(d=>(d.operatingSystem||'').includes('Windows')).length,
+      ios: devs.filter(d=>(d.operatingSystem||'').includes('iOS')).length,
+      mac: devs.filter(d=>(d.operatingSystem||'').includes('macOS')).length,
+      and: devs.filter(d=>(d.operatingSystem||'').includes('Android')).length,
+      status: devs.some(d=>d.complianceState==='noncompliant') ? 'Non-Compliant' : 'Compliant',
+    }));
+
+  const dailyLabels=[], dailyWin=[], dailyiOS=[], dailyMac=[];
+  for (let i=29; i>=0; i--) {
+    const s=new Date(); s.setDate(s.getDate()-i); s.setHours(0,0,0,0);
+    const e=new Date(s); e.setHours(23,59,59,999);
+    const dd=devices.filter(d=>{ const t=new Date(d.enrolledDateTime).getTime(); return t>=s.getTime()&&t<=e.getTime(); });
+    dailyLabels.push(`${s.getMonth()+1}/${s.getDate()}`);
+    dailyWin.push(dd.filter(d=>(d.operatingSystem||'').includes('Windows')).length);
+    dailyiOS.push(dd.filter(d=>(d.operatingSystem||'').includes('iOS')).length);
+    dailyMac.push(dd.filter(d=>(d.operatingSystem||'').includes('macOS')).length);
+  }
+
+  const eMix={Windows:0,iOS:0,macOS:0,Android:0};
+  new30devs.forEach(d=>{ const os=d.operatingSystem||''; if(os.includes('Windows'))eMix.Windows++; else if(os.includes('iOS'))eMix.iOS++; else if(os.includes('macOS'))eMix.macOS++; else if(os.includes('Android'))eMix.Android++; });
+
+  const platNames=['Windows','iOS','macOS','Android'], platColors=[C.info,C.success,C.primary,C.warning];
+  const platformCompliance=platNames.map((n,i)=>{ const pd=devices.filter(d=>(d.operatingSystem||'').includes(n)); return { label:n, pct:pd.length?Math.round(pd.filter(d=>d.complianceState==='compliant').length/pd.length*100):0, color:platColors[i] }; });
+
+  const dist={2:0,3:0,4:0,5:0,'6+':0};
+  multiEntries.forEach(([,devs])=>{ if(devs.length===2)dist[2]++; else if(devs.length===3)dist[3]++; else if(devs.length===4)dist[4]++; else if(devs.length===5)dist[5]++; else dist['6+']++; });
+
+  const osType=os=>{ if((os||'').includes('Windows'))return'win'; if((os||'').includes('iOS'))return'ios'; if((os||'').includes('macOS'))return'mac'; return'and'; };
+  const recentDevices=[...new30devs].sort((a,b)=>new Date(b.enrolledDateTime)-new Date(a.enrolledDateTime)).slice(0,8)
+    .map(d=>({ name:d.deviceName, user:d.userPrincipalName||'Unassigned', os:osType(d.operatingSystem), osLabel:d.operatingSystem||'Unknown', daysAgo:Math.max(1,Math.floor((now-new Date(d.enrolledDateTime).getTime())/dayMs)) }));
+
+  return {
+    total:devices.length, compliant, nonCompliant,
+    multiUsers:multiEntries.length, avgDevicesPerUser,
+    new30:new30devs.length, new30prev,
+    complianceTrend: DEMO.complianceTrend,
+    platformCompliance,
+    newDevicesDailyLabels:dailyLabels, newDevicesDailyWin:dailyWin, newDevicesDailyiOS:dailyiOS, newDevicesDailyMac:dailyMac,
+    enrollMix:{ labels:Object.keys(eMix), counts:Object.values(eMix), colors:[C.info,C.success,C.primary,C.warning] },
+    multiDist:{ labels:['2 devices','3 devices','4 devices','5 devices','6+ devices'], counts:Object.values(dist), colors:[C.info,C.success,C.primary,C.warning,C.danger] },
+    multiDeviceUsers, recentDevices,
+  };
+}
+
+/* ═══════════════════════════════
+   MODAL
+═══════════════════════════════ */
+function openModal()  { document.getElementById('auth-modal').classList.add('show'); }
+function closeModal() { document.getElementById('auth-modal').classList.remove('show'); }
+
+async function connectGraph() {
+  const clientId = document.getElementById('inp-client').value.trim();
+  const tenantId = document.getElementById('inp-tenant').value.trim();
+  const errEl    = document.getElementById('auth-err');
+  errEl.style.display = 'none';
+
+  if (!clientId) {
+    errEl.textContent = 'Client ID is required.';
+    errEl.style.display = 'block'; return;
+  }
+
+  const btn = document.getElementById('btn-connect');
+  btn.textContent = 'Opening sign-in…'; btn.disabled = true;
+
+  try {
+    initMsal(clientId, tenantId);
+    const token = await getToken();
+    destroyCharts();
+    const data = await loadLiveData(token);
+
+    // Update header
+    const accounts = msalInstance.getAllAccounts();
+    const userName = accounts[0]?.username || 'Live Intune Data';
+    document.getElementById('org-label').textContent = userName;
+    const badge = document.getElementById('mode-badge');
+    badge.textContent = 'LIVE'; badge.className = 'badge badge-live';
+    document.getElementById('sync-label').textContent = 'Synced: just now';
+
+    renderAll(data);
+    closeModal();
+  } catch(e) {
+    errEl.textContent = e.message.includes('popup') 
+      ? 'Sign-in popup was blocked or closed. Please try again.' 
+      : e.message;
+    errEl.style.display = 'block';
+  } finally {
+    btn.textContent = 'Sign in with Microsoft'; btn.disabled = false;
+  }
+}
+
+/* ═══════════════════════════════
+   INIT
+═══════════════════════════════ */
+renderAll(DEMO);
+</script>
+</body>
+</html>
