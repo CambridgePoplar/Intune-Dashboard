@@ -632,7 +632,7 @@ function destroyCharts() {
 
 async function fetchComplianceTrend(token, currentCompliant, currentNonCompliant) {
   try {
-    const reqBody = { select:['TrendDate','CompliantDeviceCount','NonCompliantDeviceCount'], skip:0, top:12, orderBy:['TrendDate asc'] };
+    const reqBody = { name:'DeviceComplianceTrend', select:[], filter:'', skip:0, top:12, orderBy:[] };
     console.log('[ComplianceTrend] POST body:', JSON.stringify(reqBody));
     const r = await fetch('https://graph.microsoft.com/beta/deviceManagement/reports/getDeviceComplianceTrendReport', {
       method: 'POST',
