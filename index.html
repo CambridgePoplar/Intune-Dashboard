@@ -264,7 +264,7 @@ var st,ct,ut,lt,dt,ht,pt,gt,ft,mt=function(){function t(e,t,r){this.networkInter
     <div class="modal-sub">Sign in with your Microsoft work account to pull live data</div>
     <div class="perms-box">
       <strong>Read-only permissions requested</strong>
-      DeviceManagementManagedDevices.Read.All &nbsp;·&nbsp; DeviceManagementConfiguration.Read.All &nbsp;·&nbsp; User.Read.All &nbsp;·&nbsp; Directory.Read.All
+      DeviceManagementManagedDevices.Read.All &nbsp;·&nbsp; DeviceManagementApps.Read.All &nbsp;·&nbsp; DeviceManagementConfiguration.Read.All &nbsp;·&nbsp; User.Read.All &nbsp;·&nbsp; Directory.Read.All
     </div>
     <div class="inp-group">
       <label>Client ID (App Registration)</label>
@@ -281,7 +281,7 @@ var st,ct,ut,lt,dt,ht,pt,gt,ft,mt=function(){function t(e,t,r){this.networkInter
     </div>
     <div id="auth-err"></div>
     <div style="font-size:10px;color:var(--color-fg-muted);margin-top:14px;line-height:1.6;border-top:1px solid var(--color-border-strong);padding-top:12px;">
-      <strong style="color:var(--color-fg)">Azure setup:</strong> App registration → Authentication → Single-page application → add this page URL as redirect URI. Grant admin consent on all four permissions.
+      <strong style="color:var(--color-fg)">Azure setup:</strong> App registration → Authentication → Single-page application → add this page URL as redirect URI. Grant admin consent on all five permissions.
     </div>
   </div>
 </div>
@@ -395,6 +395,24 @@ var st,ct,ut,lt,dt,ht,pt,gt,ft,mt=function(){function t(e,t,r){this.networkInter
     </div>
   </div>
 
+  <!-- Deleted Intune Devices -->
+  <div class="section-eyebrow">Intune Audit — Deleted Devices in the Last 30 Days</div>
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Devices Deleted from Intune</div>
+        <div class="card-desc">Rolling 30-day view from Microsoft Intune audit events · newest first</div>
+      </div>
+      <span class="card-tag tag-danger" id="deleted-tag">Live data only</span>
+    </div>
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead><tr><th>Device Name</th><th>Device ID</th><th>Deleted</th><th>Deleted By</th><th>Activity</th><th>Result</th></tr></thead>
+        <tbody id="deleted-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- Multi-Device Users + New Enrollments -->
   <div class="section-eyebrow">Asset Sprawl &amp; Enrollment</div>
   <div class="grid-2">
@@ -442,6 +460,7 @@ const TOOLTIP = { backgroundColor:'#27355f', borderColor:'#3d4f7a', borderWidth:
 /* ═══════════ DEMO DATA ═══════════ */
 const DEMO = {
   total:312, compliant:263, nonCompliant:49, stale:18, multiUsers:6, avgDevicesPerUser:2.3, new30:23, windows:198, mobile:114,
+  isLive:false, deletedDevices:[],
 
   platformCompliance:[
     {label:'Windows',pct:87,color:C.info},
@@ -483,6 +502,7 @@ function renderAll(d) {
   renderComplianceRing(d);
   renderPlatformBars(d);
   renderStaleTable(d);
+  renderDeletedDevices(d);
   renderMultiTable(d);
   renderNewDevicesTrend(d);
 }
@@ -538,6 +558,34 @@ function renderStaleTable(d) {
   }).join('');
 }
 
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+
+function renderDeletedDevices(d) {
+  const devices=d.deletedDevices||[];
+  const tag=document.getElementById('deleted-tag');
+  const tbody=document.getElementById('deleted-tbody');
+  if(!d.isLive) {
+    tag.textContent='Live data only';
+    tbody.innerHTML='<tr><td colspan="6" style="color:var(--color-fg-muted);padding:18px 0">Connect Graph API to load Intune deletion audit events.</td></tr>';
+    return;
+  }
+  tag.textContent=devices.length+' device'+(devices.length===1?'':'s');
+  if(!devices.length) {
+    tbody.innerHTML='<tr><td colspan="6" style="color:var(--color-fg-muted);padding:18px 0">No Intune device deletions were found in the last 30 days.</td></tr>';
+    return;
+  }
+  tbody.innerHTML=devices.map(dev=>`<tr>
+      <td class="mono"><strong>${escapeHtml(dev.name)}</strong></td>
+      <td class="mono">${escapeHtml(dev.id||'—')}</td>
+      <td style="color:var(--color-fg-muted);font-size:11px">${escapeHtml(new Date(dev.deletedAt).toLocaleString())}</td>
+      <td class="mono">${escapeHtml(dev.actor)}</td>
+      <td>${escapeHtml(dev.activity)}</td>
+      <td><span class="pill ${String(dev.result).toLowerCase()==='success'?'pill-success':'pill-warning'}">${escapeHtml(dev.result)}</span></td>
+    </tr>`).join('');
+}
+
 function renderMultiTable(d) {
   document.getElementById('multi-tbody').innerHTML = d.multiDeviceUsers.map(u=>{
     const dots=[...Array(u.win).fill('<div class="dot dot-win" title="Windows">W</div>'),...Array(u.ios).fill('<div class="dot dot-ios" title="iOS">i</div>'),...Array(u.mac).fill('<div class="dot dot-mac" title="macOS">M</div>'),...Array(u.and).fill('<div class="dot dot-and" title="Android">A</div>')].join('');
@@ -567,6 +615,7 @@ function renderNewDevicesTrend(d) {
 let msalInstance = null;
 const SCOPES = [
   'https://graph.microsoft.com/DeviceManagementManagedDevices.Read.All',
+  'https://graph.microsoft.com/DeviceManagementApps.Read.All',
   'https://graph.microsoft.com/DeviceManagementConfiguration.Read.All',
   'https://graph.microsoft.com/User.Read.All',
   'https://graph.microsoft.com/Directory.Read.All',
@@ -603,14 +652,20 @@ function destroyCharts() {
 }
 
 async function loadLiveData(token) {
-  const raw = await graphGetAll(token,
-    '/deviceManagement/managedDevices?$select=id,deviceName,operatingSystem,osVersion,complianceState,enrolledDateTime,lastSyncDateTime,userPrincipalName,managedDeviceOwnerType'
-  );
+  const now=Date.now(), dayMs=86400000;
+  const auditFilter=encodeURIComponent(`activityDateTime ge ${new Date(now-30*dayMs).toISOString()}`);
+  const [raw,auditEvents] = await Promise.all([
+    graphGetAll(token,
+      '/deviceManagement/managedDevices?$select=id,deviceName,operatingSystem,osVersion,complianceState,enrolledDateTime,lastSyncDateTime,userPrincipalName,managedDeviceOwnerType'
+    ),
+    graphGetAll(token,
+      `/deviceManagement/auditEvents?$filter=${auditFilter}&$orderby=activityDateTime desc&$top=100`
+    ),
+  ]);
 
   // ACTIVE = managed by Intune AND has assigned user
   const devices = raw.filter(d => d.userPrincipalName && d.userPrincipalName.trim() !== '');
 
-  const now=Date.now(), dayMs=86400000;
   const compliant    = devices.filter(d=>d.complianceState==='compliant').length;
   const nonCompliant = devices.filter(d=>d.complianceState==='noncompliant').length;
 
@@ -656,7 +711,32 @@ async function loadLiveData(token) {
   const dailyLabels=[],dailyWin=[],dailyiOS=[],dailyMac=[];
   for(let i=29;i>=0;i--){ const s=new Date();s.setDate(s.getDate()-i);s.setHours(0,0,0,0);const e=new Date(s);e.setHours(23,59,59,999);const dd=devices.filter(d=>{const t=new Date(d.enrolledDateTime).getTime();return t>=s.getTime()&&t<=e.getTime();});dailyLabels.push(`${s.getMonth()+1}/${s.getDate()}`);dailyWin.push(dd.filter(d=>(d.operatingSystem||'').includes('Windows')).length);dailyiOS.push(dd.filter(d=>(d.operatingSystem||'').includes('iOS')).length);dailyMac.push(dd.filter(d=>(d.operatingSystem||'').includes('macOS')).length); }
 
+  // Intune device deletions in the rolling last 30 days.
+  // Filtering is intentionally client-side after the date filter because Intune activity labels vary by workload.
+  const deletedDevices=auditEvents.flatMap(event=>{
+    const operation=String(event.activityOperationType||'').toLowerCase();
+    if(operation!=='delete') return [];
+    const category=String(event.category||'').toLowerCase();
+    const activityText=[event.activity,event.activityType,event.displayName].filter(Boolean).join(' ').toLowerCase();
+    const resources=Array.isArray(event.resources)?event.resources:[];
+    const managedResources=resources.filter(resource=>
+      [resource.type,resource.auditResourceType].filter(Boolean).join(' ').toLowerCase().includes('manageddevice')
+    );
+    const isManagedDevice=category==='device'||activityText.includes('manageddevice')||activityText.includes('managed device')||managedResources.length>0;
+    if(!isManagedDevice) return [];
+    const targets=managedResources.length?managedResources:(resources.length?resources:[{}]);
+    return targets.map(resource=>({
+      name:resource.displayName||event.displayName||event.activity||'Unknown device',
+      id:resource.resourceId||'',
+      deletedAt:event.activityDateTime,
+      actor:event.actor?.userPrincipalName||event.actor?.applicationDisplayName||event.actor?.servicePrincipalName||'System',
+      activity:event.activity||event.activityType||'Delete managed device',
+      result:event.activityResult||'Unknown',
+    }));
+  }).sort((a,b)=>new Date(b.deletedAt)-new Date(a.deletedAt));
+
   return {
+    isLive:true, deletedDevices,
     total:devices.length, compliant, nonCompliant,
     stale:staleDevices.length, multiUsers:multiEntries.length, avgDevicesPerUser,
     new30:new30devs.length, windows:winDevices.length, mobile,
@@ -700,3 +780,4 @@ renderAll(DEMO);
 </script>
 </body>
 </html>
+
